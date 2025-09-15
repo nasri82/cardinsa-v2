@@ -1,0 +1,249 @@
+-- MISSING TABLES TO ADD:
+
+CREATE TABLE product_lifecycle_stages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES product_catalog(id),
+    stage VARCHAR(50) NOT NULL, -- development, testing, regulatory_review, approved, launched, deprecated
+    effective_date DATE NOT NULL,
+    expiry_date DATE,
+    regulatory_submission_id VARCHAR(100),
+    approval_reference VARCHAR(100),
+    stage_requirements JSONB,
+    approval_documents TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE rate_filing_submissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES product_catalog(id),
+    filing_type VARCHAR(50), -- new_product, rate_change, form_change
+    regulator VARCHAR(100),
+    submission_date DATE,
+    effective_date DATE,
+    filing_reference VARCHAR(100),
+    actuarial_justification TEXT,
+    filing_documents TEXT[],
+    status VARCHAR(50), -- submitted, under_review, approved, rejected
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ENHANCEMENT TO EXISTING TABLES:
+
+CREATE TABLE actuarial_models (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    model_name VARCHAR(200) NOT NULL,
+    model_type VARCHAR(50), -- mortality, morbidity, lapse, expense
+    model_version VARCHAR(20),
+    base_table_id UUID REFERENCES actuarial_tables(id),
+    adjustment_factors JSONB,
+    geographic_adjustments JSONB,
+    credibility_weights JSONB,
+    confidence_intervals JSONB,
+    peer_review_status VARCHAR(50),
+    regulatory_approval_status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE experience_studies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    study_name VARCHAR(200),
+    study_period_start DATE,
+    study_period_end DATE,
+    product_categories TEXT[],
+    actual_vs_expected JSONB,
+    credibility_analysis JSONB,
+    recommended_adjustments JSONB,
+    approved_adjustments JSONB,
+    created_by UUID,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ADVANCED PRICING CAPABILITIES:
+
+CREATE TABLE dynamic_pricing_models (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    model_name VARCHAR(200),
+    pricing_strategy VARCHAR(50), -- competitive, value_based, cost_plus, dynamic
+    market_factors TEXT[], -- competitor_rates, demand_elasticity, loss_ratios
+    adjustment_frequency VARCHAR(50), -- real_time, daily, weekly, monthly
+    model_parameters JSONB,
+    performance_metrics JSONB,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE market_competitive_rates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_type VARCHAR(50),
+    competitor_name VARCHAR(100),
+    rate_effective_date DATE,
+    premium_rates JSONB,
+    coverage_details JSONB,
+    market_share_percentage NUMERIC(5,2),
+    data_source VARCHAR(100),
+    reliability_score NUMERIC(3,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE pricing_optimization_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    optimization_run_id UUID,
+    product_id UUID,
+    current_rates JSONB,
+    optimized_rates JSONB,
+    expected_profit_improvement NUMERIC(15,2),
+    expected_volume_impact NUMERIC(15,2),
+    confidence_level NUMERIC(3,2),
+    implementation_status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- RISK MANAGEMENT ENHANCEMENT:
+
+CREATE TABLE catastrophe_exposure_models (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    model_name VARCHAR(200),
+    peril_type VARCHAR(50), -- earthquake, hurricane, flood, cyber
+    geographic_scope JSONB,
+    exposure_calculation_method TEXT,
+    probable_maximum_loss NUMERIC(15,2),
+    return_periods INTEGER[],
+    exceedance_probabilities JSONB,
+    model_validation_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE portfolio_risk_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    calculation_date DATE,
+    risk_measure_type VARCHAR(50), -- VaR, TVaR, PML
+    confidence_level NUMERIC(3,2),
+    time_horizon_days INTEGER,
+    portfolio_value NUMERIC(15,2),
+    risk_value NUMERIC(15,2),
+    currency VARCHAR(3),
+    methodology TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- AI-POWERED UNDERWRITING:
+
+CREATE TABLE underwriting_scorecards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scorecard_name VARCHAR(200),
+    product_types TEXT[],
+    scoring_factors JSONB,
+    factor_weights JSONB,
+    score_ranges JSONB, -- {"excellent": [800,850], "good": [700,799]}
+    decision_thresholds JSONB,
+    model_performance_metrics JSONB,
+    last_calibrated DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE underwriting_exceptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID,
+    exception_type VARCHAR(50),
+    exception_description TEXT,
+    risk_impact VARCHAR(20), -- high, medium, low
+    requires_senior_approval BOOLEAN,
+    auto_approval_eligible BOOLEAN,
+    exception_conditions JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE underwriting_guidelines (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES product_catalog(id),
+    guideline_category VARCHAR(50),
+    risk_factor VARCHAR(100),
+    acceptable_ranges JSONB,
+    decline_criteria JSONB,
+    refer_criteria JSONB,
+    effective_date DATE,
+    expiry_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- AUDIT & COMPLIANCE ENHANCEMENT:
+
+CREATE TABLE regulatory_compliance_checks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    check_name VARCHAR(200),
+    regulation_reference VARCHAR(100),
+    check_frequency VARCHAR(50),
+    automated_check BOOLEAN,
+    check_criteria JSONB,
+    last_executed DATE,
+    next_due_date DATE,
+    compliance_status VARCHAR(50),
+    findings TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE audit_trails_enhanced (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(50),
+    entity_id UUID,
+    action_type VARCHAR(50),
+    field_changes JSONB,
+    business_justification TEXT,
+    regulatory_impact_assessment TEXT,
+    performed_by UUID,
+    ip_address INET,
+    session_id VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE solvency_calculations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    calculation_date DATE,
+    calculation_type VARCHAR(50), -- SCR, MCR, Own_Funds
+    methodology VARCHAR(100), -- Solvency_II, IFRS17, Local_GAAP
+    calculation_components JSONB,
+    total_amount NUMERIC(15,2),
+    currency VARCHAR(3),
+    confidence_level NUMERIC(3,2),
+    validator_id UUID,
+    validation_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ANALYTICS & BI ENHANCEMENT:
+
+CREATE TABLE product_performance_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID REFERENCES product_catalog(id),
+    measurement_period_start DATE,
+    measurement_period_end DATE,
+    policies_written INTEGER,
+    premiums_earned NUMERIC(15,2),
+    claims_incurred NUMERIC(15,2),
+    loss_ratio NUMERIC(5,2),
+    expense_ratio NUMERIC(5,2),
+    combined_ratio NUMERIC(5,2),
+    profit_margin NUMERIC(5,2),
+    customer_acquisition_cost NUMERIC(10,2),
+    customer_lifetime_value NUMERIC(15,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE predictive_models (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    model_name VARCHAR(200),
+    model_type VARCHAR(50), -- churn_prediction, cross_sell, upsell, fraud_detection
+    algorithm_type VARCHAR(50), -- random_forest, xgboost, neural_network
+    feature_importance JSONB,
+    performance_metrics JSONB, -- accuracy, precision, recall, f1_score
+    training_dataset_size INTEGER,
+    last_retrained DATE,
+    model_drift_status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
