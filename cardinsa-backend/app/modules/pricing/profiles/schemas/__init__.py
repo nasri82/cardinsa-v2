@@ -43,6 +43,13 @@ Calculation Schemas:
 - PremiumCalculationResponse: Premium calculation results
 """
 
+# Add missing imports for schemas that are being imported but don't exist
+from typing import Optional, Dict, Any, List
+from uuid import UUID
+from datetime import datetime
+from decimal import Decimal
+from pydantic import BaseModel, Field
+
 # Import enums first
 from .quotation_pricing_profile_schema import (
     InsuranceType,
@@ -130,6 +137,54 @@ from .quotation_pricing_history_schema import (
     PremiumCalculationResponse
 )
 
+# ADD MISSING SCHEMAS that your service is trying to import
+
+class PricingProfileSearchFilters(BaseModel):
+    """Schema for pricing profile search filters"""
+    
+    name: Optional[str] = Field(None, description="Filter by profile name (partial match)")
+    code: Optional[str] = Field(None, description="Filter by profile code")
+    insurance_type: Optional[str] = Field(None, description="Filter by insurance type")
+    is_active: Optional[bool] = Field(None, description="Filter by active status")
+    currency: Optional[str] = Field(None, description="Filter by currency code")
+    status: Optional[str] = Field(None, description="Filter by profile status")
+    created_after: Optional[datetime] = Field(None, description="Filter by creation date (after)")
+    created_before: Optional[datetime] = Field(None, description="Filter by creation date (before)")
+    min_premium_range: Optional[Decimal] = Field(None, description="Minimum base premium")
+    max_premium_range: Optional[Decimal] = Field(None, description="Maximum base premium")
+    page: Optional[int] = Field(1, ge=1, description="Page number")
+    page_size: Optional[int] = Field(20, ge=1, le=100, description="Items per page")
+
+
+class PricingProfileCloneRequest(BaseModel):
+    """Schema for cloning pricing profiles"""
+    
+    new_name: str = Field(..., description="Name for the cloned profile")
+    new_code: Optional[str] = Field(None, description="Code for cloned profile (auto-generated if not provided)")
+    include_rules: bool = Field(True, description="Clone associated rules")
+    customizations: Optional[Dict[str, Any]] = Field(None, description="Field customizations for clone")
+
+
+class PricingProfileComparisonResult(BaseModel):
+    """Schema for profile comparison results - THIS WAS THE MISSING ONE CAUSING THE ERROR"""
+    
+    profile1_id: UUID = Field(..., description="First profile ID")
+    profile2_id: UUID = Field(..., description="Second profile ID")
+    compatibility_score: float = Field(..., description="Compatibility score (0-100)")
+    differences: Dict[str, Any] = Field(default_factory=dict, description="Field differences")
+    similarities: Dict[str, Any] = Field(default_factory=dict, description="Common fields")
+    recommendations: List[str] = Field(default_factory=list, description="Merge recommendations")
+
+
+class PricingProfileComparison(BaseModel):
+    """Schema for profile comparison request"""
+    
+    profile_id_1: UUID = Field(..., description="First profile to compare")
+    profile_id_2: UUID = Field(..., description="Second profile to compare")
+    include_rules: bool = Field(True, description="Include rule comparison")
+    detailed_analysis: bool = Field(False, description="Perform detailed analysis")
+
+
 __all__ = [
     # Enums
     "InsuranceType",
@@ -214,4 +269,10 @@ __all__ = [
     "BatchEvaluationResult",
     "BatchEvaluationProfileRequest",
     "BatchEvaluationProfileResult",
+    
+    # ADDED MISSING SCHEMAS
+    "PricingProfileSearchFilters",
+    "PricingProfileCloneRequest", 
+    "PricingProfileComparisonResult",  # This was the main one causing the error
+    "PricingProfileComparison",
 ]

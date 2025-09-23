@@ -32,25 +32,25 @@ from app.modules.pricing.product.routes.actuarial_table_route import router as a
 from app.modules.pricing.reference.router import router as pricing_reference_router
 
 # Benefits module imports
-from app.modules.benefits.routes.benefit_category_route import router as benefit_category_router
-from app.modules.benefits.routes.coverage_route import router as coverage_router
-from app.modules.benefits.routes.coverage_option_route import router as coverage_option_router
-from app.modules.benefits.routes.benefit_type_route import router as benefit_type_router
-from app.modules.benefits.routes.benefit_calculation_rule_route import router as benefit_rule_router
-# Step 2D – Benefit Module Routers
-from app.modules.benefits.routes.plan_benefit_schedule_route import router as plan_benefit_schedule_router
-from app.modules.benefits.routes.benefit_condition_route import router as benefit_condition_router
-from app.modules.benefits.routes.benefit_translation_route import router as benefit_translation_router
-from app.modules.benefits.routes.benefit_preapproval_rule_route import router as benefit_preapproval_rule_router
+from app.modules.pricing.benefits.routes.benefit_category_route import router as benefit_category_router
+from app.modules.pricing.benefits.routes.coverage_route import router as coverage_router
+from app.modules.pricing.benefits.routes.coverage_option_route import router as coverage_option_router
+from app.modules.pricing.benefits.routes.benefit_type_route import router as benefit_type_router
+from app.modules.pricing.benefits.routes.benefit_calculation_rule_route import router as benefit_rule_router
+# Step 2D â€" Benefit Module Routers
+from app.modules.pricing.benefits.routes.plan_benefit_schedule_route import router as plan_benefit_schedule_router
+from app.modules.pricing.benefits.routes.benefit_condition_route import router as benefit_condition_router
+from app.modules.pricing.benefits.routes.benefit_translation_route import router as benefit_translation_router
+from app.modules.pricing.benefits.routes.benefit_preapproval_rule_route import router as benefit_preapproval_rule_router
 
 # Step 2C Plan Module Routers
-from app.modules.plans.routes.plan_route import router as plan_router
-from app.modules.plans.routes.plan_coverage_link_route import router as plan_coverage_link_router
-from app.modules.plans.routes.plan_exclusion_route import router as plan_exclusion_router
-from app.modules.plans.routes.plan_exclusion_link_route import router as plan_exclusion_link_router
-from app.modules.plans.routes.plan_version_route import router as plan_version_router
-from app.modules.plans.routes.plan_territory_route import router as plan_territory_router
-from app.modules.plans.routes.plan_eligibility_rule_route import router as plan_eligibility_rule_router
+from app.modules.pricing.plans.routes.plan_route import router as plan_router
+from app.modules.pricing.plans.routes.plan_coverage_link_route import router as plan_coverage_link_router
+from app.modules.pricing.plans.routes.plan_exclusion_route import router as plan_exclusion_router
+from app.modules.pricing.plans.routes.plan_exclusion_link_route import router as plan_exclusion_link_router
+from app.modules.pricing.plans.routes.plan_version_route import router as plan_version_router
+from app.modules.pricing.plans.routes.plan_territory_route import router as plan_territory_router
+from app.modules.pricing.plans.routes.plan_eligibility_rule_route import router as plan_eligibility_rule_router
 
 # Step 3A Imports
 from app.modules.providers.routes.providers_route import router as providers_router
@@ -67,6 +67,10 @@ from app.modules.demographics.routes.occupation_category_route import router as 
 # Pricing Profiles (Step 4)
 from app.modules.pricing.profiles.router import router as pricing_profiles_router
 
+# 🚀 STEP 6: ADVANCED RULES ENGINE IMPORTS
+# Add these new imports for Step 6 components
+from app.modules.pricing.profiles.routes.advanced_rules_route import router as advanced_rules_router
+from app.modules.pricing.profiles.routes.rule_orchestration_route import router as rule_orchestration_router
 
 from app.modules.pricing.modifiers.router import router as pricing_modifiers_router
 
@@ -85,6 +89,10 @@ from app.modules.pricing.calculations.routes import (
 from app.modules.pricing.quotations.routes.quotations_route import router as quotations_router
 from app.modules.pricing.quotations.routes.quotation_items_route import router as quotation_items_router
 from app.modules.pricing.quotations.routes.quotation_factors_route import router as quotation_factors_router
+
+# 🎉  UNDERWRITING MODULE 
+from app.modules.underwriting.routes.underwriting_route import router as underwriting_router
+
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -133,7 +141,7 @@ api_router.include_router(benefit_translation_router)
 api_router.include_router(benefit_preapproval_rule_router)
 
 
-# ✅ Register Step 2C Plan Routes
+# âœ… Register Step 2C Plan Routes
 api_router.include_router(plan_router)
 api_router.include_router(plan_coverage_link_router)
 api_router.include_router(plan_exclusion_router)
@@ -142,7 +150,7 @@ api_router.include_router(plan_version_router)
 api_router.include_router(plan_territory_router)
 api_router.include_router(plan_eligibility_rule_router)
 
-# ✅ Step 3A Router Includes
+# âœ… Step 3A Router Includes
 api_router.include_router(providers_router)
 api_router.include_router(provider_types_router)
 api_router.include_router(provider_networks_router)
@@ -158,6 +166,10 @@ api_router.include_router(occupation_category_router, prefix="/occupation-catego
 # Step 4: Pricing Profiles
 api_router.include_router(pricing_profiles_router)
 
+# 🚀 STEP 6: ADVANCED RULES ENGINE ROUTERS
+# Add these router registrations for Step 6 components
+api_router.include_router(advanced_rules_router)
+api_router.include_router(rule_orchestration_router)
 
 api_router.include_router(pricing_modifiers_router, prefix="/pricing/modifiers")
 
@@ -170,3 +182,7 @@ api_router.include_router(premium_override_log_route.router)
 api_router.include_router(quotations_router)
 api_router.include_router(quotation_items_router)
 api_router.include_router(quotation_factors_router)
+
+
+### underwriting
+api_router.include_router(underwriting_router, tags=["Underwriting Engine"])

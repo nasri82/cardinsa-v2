@@ -288,6 +288,89 @@ def cache_result(ttl: int = 3600, key_prefix: str = ""):
         return wrapper
     return decorator
 
+class CacheManager:
+    """
+    Cache manager class providing a unified interface for caching operations.
+    This provides the cache_manager that your underwriting repository expects.
+    """
+    
+    def __init__(self):
+        self._cache_client = None
+    
+    @property
+    def cache(self):
+        """Get the cache client instance"""
+        if self._cache_client is None:
+            self._cache_client = get_cache_client()
+        return self._cache_client
+    
+    async def get(self, key: str, default=None):
+        """Get value from cache with optional default"""
+        return await cache_get(key, default)
+    
+    async def set(self, key: str, value: Any, ttl: int = 3600):
+        """Set value in cache with TTL"""
+        return await cache_set(key, value, ttl)
+    
+    async def delete(self, key: str):
+        """Delete key from cache"""
+        return await cache_delete(key)
+    
+    async def exists(self, key: str):
+        """Check if key exists in cache"""
+        return await self.cache.exists(key)
+    
+    async def clear(self):
+        """Clear all cache entries"""
+        return await self.cache.clear()
+    
+    def invalidate(self, pattern: str = None):
+        """Invalidate cache entries (alias for clear for now)"""
+        return self.clear()
+    
+    def cached(self, ttl: int = 3600, key_prefix: str = ""):
+        """
+        Decorator for caching method results
+        
+        Args:
+            ttl: Time to live in seconds
+            key_prefix: Prefix for cache key
+        
+        Usage:
+            @cache_manager.cached(ttl=300, key_prefix="active_rules")
+            async def get_active_rules(self):
+                return await self.db.query(...).all()
+        """
+        def decorator(func):
+            async def wrapper(*args, **kwargs):
+                # Generate cache key from function name and arguments
+                import hashlib
+                
+                # Skip 'self' argument for methods
+                cache_args = args[1:] if args and hasattr(args[0], '__dict__') else args
+                key_data = f"{func.__name__}:{str(cache_args)}:{str(sorted(kwargs.items()))}"
+                cache_key = f"{key_prefix}:{hashlib.md5(key_data.encode()).hexdigest()}" if key_prefix else hashlib.md5(key_data.encode()).hexdigest()
+                
+                # Try to get from cache
+                cached_result = await self.get(cache_key)
+                if cached_result is not None:
+                    return cached_result
+                
+                # Call function and cache result
+                if asyncio.iscoroutinefunction(func):
+                    result = await func(*args, **kwargs)
+                else:
+                    result = func(*args, **kwargs)
+                
+                await self.set(cache_key, result, ttl)
+                return result
+            
+            return wrapper
+        return decorator
+
+
+# Create global cache manager instance
+cache_manager = CacheManager()
 
 # Export the main interface
 __all__ = [
@@ -296,6 +379,7 @@ __all__ = [
     'cache_set',
     'cache_get', 
     'cache_delete',
+    'cache_manager',
     'cache_result',
     'InMemoryCache',
     'RedisCache',
