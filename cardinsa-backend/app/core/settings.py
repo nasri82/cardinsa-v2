@@ -19,7 +19,9 @@ class Settings(BaseSettings):
 
     # --- Security / JWT (compatible with your .env) ---
     JWT_SECRET: str = Field("change-me-in-.env", validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
-    JWT_EXPIRE_MINUTES: int = Field(60, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES", "ACCESS_TOKEN_EXPIRE_MINUTES"))
+    REFRESH_TOKEN_SECRET: str = Field("change-me-in-.env-refresh", validation_alias=AliasChoices("REFRESH_TOKEN_SECRET"))
+    JWT_EXPIRE_MINUTES: int = Field(30, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES", "ACCESS_TOKEN_EXPIRE_MINUTES"))  # Changed from 60 to 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(7, validation_alias=AliasChoices("REFRESH_TOKEN_EXPIRE_DAYS"))  # NEW: 7 days
     JWT_ALGORITHM: str = Field("HS256", validation_alias=AliasChoices("JWT_ALGORITHM", "JWT_ALG"))
 
     # (keep your existing EdDSA fields if you still need them later)
