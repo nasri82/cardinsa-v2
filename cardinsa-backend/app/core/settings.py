@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     CORS_ALLOW_METHODS: List[str] = ["*"]
     CORS_ALLOW_HEADERS: List[str] = ["*"]
 
+    # --- Rate Limiting ---
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS: int = 100  # requests per window
+    RATE_LIMIT_WINDOW: int = 60  # window in seconds
+    RATE_LIMIT_STORAGE: str = "memory"  # "memory" or "redis"
+    RATE_LIMIT_REDIS_URL: Optional[str] = None  # "redis://localhost:6379/0"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
