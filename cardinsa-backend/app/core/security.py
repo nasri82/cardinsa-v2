@@ -1,8 +1,10 @@
 # app/core/security.py
 import jwt
+import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
 from app.core.settings import settings
 
@@ -107,48 +109,78 @@ def decode_token(token: str, secret: str, algorithm: str = "HS256") -> Dict[str,
 
 
 def create_access_token(
-    subject: str, 
-    expires_delta: Optional[timedelta] = None
-) -> str:
+    subject: str,
+    expires_delta: Optional[timedelta] = None,
+    extra_data: Optional[Dict[str, Any]] = None
+) -> Tuple[str, str]:
     """
-    Create an access token for a user.
-    
+    Create an access token with JTI for blacklist tracking.
+
+    SECURITY: JTI enables token revocation and blacklisting
+
     Args:
         subject: User identifier (typically user ID as string)
         expires_delta: Optional custom expiration time
-        
+        extra_data: Optional extra claims to add to token (e.g., device_fp)
+
     Returns:
-        JWT access token
+        Tuple of (token, jti) - Both needed for token rotation
     """
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    
-    return create_token(
-        data={"sub": subject},
+
+    # Generate unique JTI for this token
+    jti = str(uuid.uuid4())
+
+    # Prepare token data
+    data = {"sub": subject, "jti": jti, "type": "access"}
+    if extra_data:
+        data.update(extra_data)
+
+    token = create_token(
+        data=data,
         secret=settings.JWT_SECRET,
         expires_delta=expires_delta,
         algorithm=settings.JWT_ALGORITHM
     )
 
+    return token, jti
 
-def create_refresh_token(subject: str) -> str:
+
+def create_refresh_token(
+    subject: str,
+    extra_data: Optional[Dict[str, Any]] = None
+) -> Tuple[str, str]:
     """
-    Create a refresh token for a user.
+    Create a refresh token with JTI for rotation tracking.
+
+    SECURITY: JTI enables refresh token rotation
 
     Args:
         subject: User identifier (typically user ID as string)
+        extra_data: Optional extra claims to add to token (e.g., device_fp)
 
     Returns:
-        JWT refresh token with longer expiration
+        Tuple of (token, jti) - Both needed for token rotation
     """
     expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-    return create_token(
-        data={"sub": subject, "type": "refresh"},
+    # Generate unique JTI for this token
+    jti = str(uuid.uuid4())
+
+    # Prepare token data
+    data = {"sub": subject, "jti": jti, "type": "refresh"}
+    if extra_data:
+        data.update(extra_data)
+
+    token = create_token(
+        data=data,
         secret=settings.REFRESH_TOKEN_SECRET,  # Use separate secret for refresh tokens
         expires_delta=expires_delta,
         algorithm=settings.JWT_ALGORITHM
     )
+
+    return token, jti
 
 
 def verify_token(token: str) -> Optional[str]:
@@ -191,10 +223,10 @@ def create_password_reset_token(email: str) -> str:
 def verify_password_reset_token(token: str) -> Optional[str]:
     """
     Verify a password reset token and return the email.
-    
+
     Args:
         token: Password reset token
-        
+
     Returns:
         Email from token, or None if invalid
     """
@@ -206,3 +238,95 @@ def verify_password_reset_token(token: str) -> Optional[str]:
         return email
     except ValueError:
         return None
+
+
+# ================================================================
+# TOKEN BLACKLIST FUNCTIONS (for rotation and revocation)
+# ================================================================
+
+def is_token_blacklisted(jti: str, db: Session) -> bool:
+    """
+    Check if a token is blacklisted.
+
+    SECURITY: Prevents reuse of revoked tokens
+
+    Args:
+        jti: JWT ID (jti claim) from token
+        db: Database session
+
+    Returns:
+        True if token is blacklisted, False otherwise
+    """
+    # Import here to avoid circular dependency
+    from app.modules.auth.models.token_blacklist_model import TokenBlacklist
+
+    blacklisted = db.query(TokenBlacklist).filter(
+        TokenBlacklist.token_jti == jti
+    ).first()
+
+    return blacklisted is not None
+
+
+def blacklist_token(
+    jti: str,
+    token_type: str,
+    user_id: uuid.UUID,
+    expires_at: datetime,
+    reason: str,
+    db: Session
+) -> None:
+    """
+    Add a token to the blacklist.
+
+    SECURITY USE CASES:
+    - Token rotation: Blacklist old refresh token when issuing new one
+    - Logout: Blacklist both access and refresh tokens
+    - Security: Blacklist compromised tokens
+
+    Args:
+        jti: JWT ID (jti claim) from token
+        token_type: 'access' or 'refresh'
+        user_id: User who owns the token
+        expires_at: When token expires (for cleanup)
+        reason: Why blacklisting ('rotation', 'logout', 'security')
+        db: Database session
+    """
+    # Import here to avoid circular dependency
+    from app.modules.auth.models.token_blacklist_model import TokenBlacklist
+
+    blacklist_entry = TokenBlacklist(
+        token_jti=jti,
+        token_type=token_type,
+        user_id=user_id,
+        expires_at=expires_at,
+        reason=reason
+    )
+
+    db.add(blacklist_entry)
+    db.commit()
+
+
+def cleanup_expired_blacklist_tokens(db: Session) -> int:
+    """
+    Clean up expired tokens from blacklist.
+
+    MAINTENANCE: Should be run periodically (daily cron job recommended)
+
+    Args:
+        db: Database session
+
+    Returns:
+        Number of tokens deleted
+    """
+    # Import here to avoid circular dependency
+    from app.modules.auth.models.token_blacklist_model import TokenBlacklist
+
+    now = datetime.utcnow()
+
+    deleted_count = db.query(TokenBlacklist).filter(
+        TokenBlacklist.expires_at < now
+    ).delete()
+
+    db.commit()
+
+    return deleted_count
