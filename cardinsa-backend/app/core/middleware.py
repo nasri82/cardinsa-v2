@@ -23,9 +23,42 @@ class RequestIDMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 def install_cors(app: FastAPI) -> None:
+    """
+    Configure CORS middleware with security validation.
+
+    SECURITY: Never use wildcard origins with credentials enabled
+    as this violates CORS spec and creates security vulnerabilities.
+    """
+    # Convert origins to string list
+    origins = [str(o) for o in settings.CORS_ORIGINS] if settings.CORS_ORIGINS else []
+
+    # Security validation: Cannot use wildcard with credentials
+    if settings.CORS_ALLOW_CREDENTIALS and ("*" in origins or not origins):
+        raise ValueError(
+            "CORS Security Error: Cannot use wildcard origins or empty origins "
+            "with allow_credentials=True. Please specify explicit origins in "
+            "CORS_ORIGINS environment variable."
+        )
+
+    # In development, allow localhost variants if no origins specified
+    if not origins and settings.DEBUG:
+        origins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+        ]
+        print(f"⚠️  WARNING: Using default development origins: {origins}")
+        print("   Set CORS_ORIGINS in .env for production!")
+
+    if not origins:
+        raise ValueError(
+            "CORS_ORIGINS must be configured. Set CORS_ORIGINS in your .env file."
+        )
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(o) for o in settings.CORS_ORIGINS] or (["*"] if settings.DEBUG else []),
+        allow_origins=origins,
         allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
