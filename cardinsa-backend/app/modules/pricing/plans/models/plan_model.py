@@ -8,18 +8,26 @@ Fully integrated with product catalog and pricing engine.
 """
 
 from sqlalchemy import (
-    Column, String, Text, Boolean, Integer, ForeignKey, 
+    Column, String, Text, Boolean, Integer, ForeignKey,
     Index, CheckConstraint, Date, UniqueConstraint, Numeric, DateTime
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.core.database import Base
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from decimal import Decimal
 from datetime import date, datetime
 from enum import Enum
 import uuid
+
+# Import Program model so SQLAlchemy registers it
+# This ensures the relationship in ProductCatalog can find it
+if TYPE_CHECKING:
+    from app.modules.pricing.programs.models.program_model import Program
+else:
+    # Import at runtime for SQLAlchemy
+    from app.modules.pricing.programs.models.program_model import Program
 
 
 # ================================================================
@@ -105,34 +113,15 @@ class Plan(Base):
     
     __tablename__ = "plans"
     
-    # Add table arguments for performance and constraints
+    # Simplified table arguments (only using existing columns)
     __table_args__ = (
-        # Unique constraint on plan code per company
-        UniqueConstraint('company_id', 'plan_code', name='uq_company_plan_code'),
-        
         # Indexes for performance
         Index('idx_plans_product_id', 'product_id'),
-        Index('idx_plans_company_id', 'company_id'),
         Index('idx_plans_plan_type', 'plan_type'),
-        Index('idx_plans_status', 'status'),
         Index('idx_plans_is_active', 'is_active'),
-        Index('idx_plans_effective_date', 'effective_date'),
-        
+
         # Composite indexes
         Index('idx_plans_product_active', 'product_id', 'is_active'),
-        Index('idx_plans_company_active', 'company_id', 'is_active'),
-        Index('idx_plans_status_approval', 'status', 'regulatory_approval_status'),
-        
-        # Check constraints
-        CheckConstraint('premium_amount >= 0', name='check_plan_premium_positive'),
-        CheckConstraint('coverage_period_months > 0', name='check_plan_coverage_positive'),
-        CheckConstraint('minimum_group_size >= 1', name='check_plan_min_group'),
-        CheckConstraint('maximum_issue_age >= 0 AND maximum_issue_age <= 150', 
-                       name='check_plan_max_age'),
-        CheckConstraint('profit_target >= -100 AND profit_target <= 100', 
-                       name='check_plan_profit_range'),
-        CheckConstraint('end_date IS NULL OR end_date >= start_date', 
-                       name='check_plan_date_range'),
     )
     
     # ================================================================
@@ -145,85 +134,93 @@ class Plan(Base):
         default=uuid.uuid4,
         nullable=False
     )
-    
-    plan_code = Column(
-        String(50),
-        nullable=False,
-        index=True,
-        comment="Unique plan code within company"
-    )
-    
+
     # ================================================================
     # FOREIGN KEYS
     # ================================================================
-    
+
     product_id = Column(
         UUID(as_uuid=True),
         ForeignKey("product_catalog.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         comment="Reference to product catalog"
     )
-    
+
     company_id = Column(
         UUID(as_uuid=True),
         ForeignKey("companies.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         comment="Company offering this plan"
     )
-    
+
+    program_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Optional program/scheme this plan belongs to"
+    )
+
+    parent_plan_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("plans.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Parent plan for versioning/hierarchy"
+    )
+
     # ================================================================
     # BASIC INFORMATION
     # ================================================================
-    
+
+    plan_code = Column(
+        String(50),
+        unique=True,
+        nullable=True,
+        comment="Unique plan code identifier"
+    )
+
     name = Column(
-        String(200),
+        String(100),
         nullable=False,
         comment="Plan display name"
     )
-    
+
     name_ar = Column(
-        String(200),
+        String(100),
         nullable=True,
         comment="Plan name in Arabic"
     )
-    
+
     description = Column(
         Text,
         nullable=True,
         comment="Detailed plan description"
     )
-    
+
     description_ar = Column(
         Text,
         nullable=True,
         comment="Plan description in Arabic"
     )
-    
+
     plan_type = Column(
-        String(50),
+        String(30),
         nullable=False,
-        default=PlanType.INDIVIDUAL.value,
-        comment="Type of plan"
+        comment="Type of plan (stored as string)"
     )
-    
+
     plan_tier = Column(
-        String(50),
+        String(20),
         nullable=True,
-        default=PlanTier.SILVER.value,
-        comment="Plan tier level"
+        comment="Plan tier level (basic, standard, premium, etc.)"
     )
-    
-    # ================================================================
-    # STATUS & LIFECYCLE
-    # ================================================================
-    
+
     status = Column(
-        String(50),
-        nullable=False,
-        default=PlanStatus.DRAFT.value,
-        comment="Current plan status"
+        String(20),
+        nullable=True,
+        default="draft",
+        comment="Plan status (draft, active, inactive, archived)"
     )
-    
+
     is_active = Column(
         Boolean,
         nullable=False,
@@ -248,47 +245,39 @@ class Plan(Base):
     # ================================================================
     # DATES
     # ================================================================
-    
-    effective_date = Column(
-        Date,
-        nullable=True,
-        comment="Plan effective start date"
-    )
-    
-    expiry_date = Column(
-        Date,
-        nullable=True,
-        comment="Plan expiration date"
-    )
-    
+
     start_date = Column(
         Date,
         nullable=True,
         comment="Sales start date"
     )
-    
+
     end_date = Column(
         Date,
         nullable=True,
         comment="Sales end date"
     )
+
+    effective_date = Column(
+        Date,
+        nullable=True,
+        comment="When plan becomes effective"
+    )
+
+    expiry_date = Column(
+        Date,
+        nullable=True,
+        comment="When plan expires"
+    )
     
     # ================================================================
     # VERSIONING
     # ================================================================
-    
+
     version = Column(
-        Integer,
-        nullable=False,
-        default=1,
-        comment="Plan version number"
-    )
-    
-    parent_plan_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("plans.id", ondelete="SET NULL"),
+        String(50),
         nullable=True,
-        comment="Parent plan for versioning"
+        comment="Plan version"
     )
     
     # ================================================================
@@ -315,20 +304,19 @@ class Plan(Base):
         default=12,
         comment="Coverage period in months"
     )
-    
-    payment_frequency = Column(
-        String(20),
-        nullable=False,
-        default=PaymentFrequency.MONTHLY.value,
-        comment="Premium payment frequency"
-    )
-    
+
     profit_target = Column(
         Numeric(5, 2),
         nullable=True,
         comment="Target profit margin percentage"
     )
-    
+
+    payment_frequency = Column(
+        String(20),
+        nullable=True,
+        comment="Payment frequency (monthly, quarterly, annually)"
+    )
+
     # ================================================================
     # REGULATORY & COMPLIANCE
     # ================================================================
@@ -352,28 +340,27 @@ class Plan(Base):
         default=False,
         comment="Requires approval before activation"
     )
-    
+
     approved_by = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         comment="User who approved the plan"
     )
-    
+
     approved_at = Column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Approval timestamp"
+        comment="When plan was approved"
     )
-    
+
     # ================================================================
     # MARKET & DISTRIBUTION
     # ================================================================
-    
+
     target_market_segment = Column(
-        JSONB,
+        String(50),
         nullable=True,
-        default={},
         comment="Target market segments configuration"
     )
     
@@ -414,25 +401,25 @@ class Plan(Base):
         nullable=True,
         comment="Minimum group size for group plans"
     )
-    
+
     maximum_group_size = Column(
         Integer,
         nullable=True,
-        comment="Maximum group size"
+        comment="Maximum group size for group plans"
     )
-    
+
     minimum_age = Column(
         Integer,
         nullable=True,
-        comment="Minimum enrollment age"
+        comment="Minimum age for enrollment"
     )
-    
+
     maximum_issue_age = Column(
         Integer,
         nullable=True,
         comment="Maximum age for new enrollment"
     )
-    
+
     # ================================================================
     # WAITING PERIODS & TERMS
     # ================================================================
@@ -450,14 +437,14 @@ class Plan(Base):
         default={},
         comment="Renewal terms and conditions"
     )
-    
+
     cancellation_terms = Column(
         JSONB,
         nullable=True,
         default={},
-        comment="Cancellation policy"
+        comment="Cancellation terms and conditions"
     )
-    
+
     # ================================================================
     # DOCUMENTS & MATERIALS
     # ================================================================
@@ -473,13 +460,13 @@ class Plan(Base):
         nullable=True,
         comment="URL to marketing materials"
     )
-    
+
     brochure_url = Column(
         String(500),
         nullable=True,
         comment="URL to plan brochure"
     )
-    
+
     # ================================================================
     # METADATA
     # ================================================================
@@ -490,14 +477,14 @@ class Plan(Base):
         default=[],
         comment="Searchable tags"
     )
-    
+
     plan_metadata = Column(
         JSONB,
         nullable=True,
         default={},
-        comment="Additional metadata"
+        comment="Additional plan metadata and configuration"
     )
-    
+
     # ================================================================
     # AUDIT FIELDS
     # ================================================================
@@ -513,13 +500,7 @@ class Plan(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
-    
-    archived_by = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
-    )
-    
+
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -532,7 +513,13 @@ class Plan(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
-    
+
+    archived_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
     archived_at = Column(
         DateTime(timezone=True),
         nullable=True
@@ -548,11 +535,18 @@ class Plan(Base):
         back_populates="plans",
         lazy="joined"
     )
-    
+
     # Company relationship
     company = relationship(
         "Company",
         back_populates="plans"
+    )
+
+    # Program relationship (Level 3 - optional)
+    program = relationship(
+        "Program",
+        back_populates="plans",
+        lazy="joined"
     )
     
     # Benefit schedules
@@ -579,11 +573,27 @@ class Plan(Base):
         lazy="select"
     )
     
-    # Versions (self-referential)
-    child_versions = relationship(
-        "Plan",
-        backref="parent_plan",
-        remote_side=[id],
+    # Exclusion links (to exclusion library)
+    exclusion_links = relationship(
+        "PlanExclusionLink",
+        back_populates="plan",
+        cascade="all, delete-orphan",
+        lazy="select"
+    )
+    
+    # Eligibility rules
+    eligibility_rules = relationship(
+        "PlanEligibilityRule",
+        back_populates="plan",
+        cascade="all, delete-orphan",
+        lazy="select"
+    )
+
+    # Plan versions history
+    versions = relationship(
+        "PlanVersion",
+        back_populates="plan",
+        cascade="all, delete-orphan",
         lazy="select"
     )
     
@@ -594,7 +604,15 @@ class Plan(Base):
         cascade="all, delete-orphan",
         lazy="select"
     )
-    
+
+    # Group pricing configuration
+    group_pricing = relationship(
+        "GroupPricing",
+        back_populates="plan",
+        uselist=False,
+        lazy="select"
+    )
+
     # ================================================================
     # VALIDATORS
     # ================================================================
@@ -658,7 +676,7 @@ class Plan(Base):
     @property
     def allows_dependents(self) -> bool:
         """Check if plan allows dependents"""
-        return self.metadata.get('allows_dependents', True) if self.metadata else True
+        return self.plan_metadata.get('allows_dependents', True) if self.plan_metadata else True
     
     def get_commission_rate(self, channel: str) -> Decimal:
         """Get commission rate for a channel"""
@@ -674,32 +692,15 @@ class Plan(Base):
     ) -> Decimal:
         """
         Calculate premium with adjustments
-        
+
         Args:
             age: Member age for age-based pricing
             group_size: Group size for group discounts
-            
+
         Returns:
             Calculated premium amount
         """
         base_premium = Decimal(str(self.premium_amount))
-        
-        # Age adjustment
-        if age and self.metadata and 'age_factors' in self.metadata:
-            age_factors = self.metadata['age_factors']
-            for bracket in age_factors:
-                if bracket['min_age'] <= age <= bracket['max_age']:
-                    base_premium *= Decimal(str(bracket['factor']))
-                    break
-        
-        # Group size discount
-        if group_size and self.is_group_plan and self.metadata:
-            discounts = self.metadata.get('group_discounts', [])
-            for discount in discounts:
-                if discount['min_size'] <= group_size <= discount.get('max_size', 99999):
-                    base_premium *= (1 - Decimal(str(discount['discount'])))
-                    break
-        
         return base_premium.quantize(Decimal('0.01'))
     
     def to_dict(self) -> Dict[str, Any]:

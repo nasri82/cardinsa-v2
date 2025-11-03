@@ -12,15 +12,21 @@ This is the COMPLETE version of your pricing profile model with all Step 4 requi
 - ✅ Proper indexes and relationships
 """
 
-from sqlalchemy import Column, String, Text, Boolean, Numeric, DateTime, Index, Integer
+from sqlalchemy import Column, String, Text, Boolean, Numeric, DateTime, Index, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.sql import func
 from app.core.database import Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin
 from decimal import Decimal
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from enum import Enum
 import uuid
+
+if TYPE_CHECKING:
+    from app.modules.demographics.models.premium_age_bracket_model import PremiumAgeBracket
+    from app.modules.demographics.models.premium_region_model import PremiumRegion
+    from app.modules.pricing.calculations.models.premium_calculation_model import PremiumCalculation
+    from app.modules.reference.models.insurance_type_model import InsuranceType
 
 
 # Enums for the model
@@ -102,7 +108,8 @@ class QuotationPricingProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDel
     profile_description = Column(Text, comment="Detailed description of the profile purpose")
     
     # Insurance configuration
-    insurance_type = Column(String(50), nullable=False, comment="Type of insurance (health, motor, life, etc.)")
+    insurance_type = Column(String(50), nullable=False, comment="DEPRECATED: Use insurance_type_id instead")
+    insurance_type_id = Column(UUID(as_uuid=True), ForeignKey('insurance_types.id', ondelete='RESTRICT'), nullable=False, index=True, comment="Foreign key to insurance_types table")
     product_line = Column(String(100), nullable=True, comment="Specific product line within insurance type")
     market_segment = Column(String(100), nullable=True, comment="Target market segment")
     
@@ -144,7 +151,51 @@ class QuotationPricingProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDel
     # Network cost integration
     consider_network_costs = Column(Boolean, default=False, nullable=False, comment="Whether to factor in network costs")
     network_cost_factor = Column(Numeric(5, 4), default=Decimal('1.0000'), nullable=False, comment="Multiplier for network costs")
-    
+
+    # =================================================================
+    # FAMILY TIER PRICING - PHASE 1.1
+    # =================================================================
+
+    # Tier-based pricing configuration
+    enable_tier_based_pricing = Column(Boolean, default=False, nullable=False, comment="Enable family tier-based pricing")
+    default_tier_id = Column(UUID(as_uuid=True), ForeignKey('family_tier_pricing.id', ondelete='SET NULL'), nullable=True, comment="Default family tier for this profile")
+
+    # Supported tier types (stored as JSONB array)
+    supported_tier_types = Column(JSONB, nullable=True, comment="List of supported family tier types (e.g., ['individual', 'couple', 'family'])")
+
+    # Tier pricing configuration
+    tier_pricing_config = Column(JSONB, nullable=True, comment="Advanced tier pricing configuration")
+    """
+    Example tier_pricing_config structure:
+    {
+        "allow_tier_override": true,
+        "auto_recommend_tier": true,
+        "tier_selection_rules": {
+            "min_member_count": 1,
+            "max_member_count": 10,
+            "dependent_age_limit": 26
+        },
+        "tier_multipliers": {
+            "individual": 1.0,
+            "couple": 1.8,
+            "family": 2.5,
+            "single_parent": 2.2
+        },
+        "tier_discounts": {
+            "family": 0.05,
+            "four_plus": 0.10
+        },
+        "composite_calculation": {
+            "method": "age_banded",
+            "apply_family_maximum": true,
+            "family_max_members": 5
+        }
+    }
+    """
+
+    # Tier eligibility rules
+    tier_eligibility_rules = Column(JSONB, nullable=True, comment="Rules for tier eligibility determination")
+
     # =================================================================
     # OPERATIONAL SETTINGS
     # =================================================================
@@ -198,15 +249,98 @@ class QuotationPricingProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDel
     # =================================================================
     
     # Note: These relationships will be uncommented once other models are complete
-    # profile_rules = relationship(
-    #     "QuotationPricingProfileRule",
+    profile_rules = relationship(
+        "QuotationPricingProfileRule",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+
+    # COMMENTED OUT - Circular dependency with modifier models
+    # TODO: Fix circular import issue with modifier models
+    # deductibles = relationship(
+    #     "PricingDeductible",
     #     back_populates="profile",
     #     cascade="all, delete-orphan",
     #     lazy="dynamic"
     # )
-    
+
+    # copayments = relationship(
+    #     "PricingCopayment",
+    #     back_populates="profile",
+    #     cascade="all, delete-orphan",
+    #     lazy="dynamic"
+    # )
+
+    # discounts = relationship(
+    #     "PricingDiscount",
+    #     back_populates="profile",
+    #     cascade="all, delete-orphan",
+    #     lazy="dynamic"
+    # )
+
+    # commissions = relationship(
+    #     "PricingCommission",
+    #     back_populates="profile",
+    #     cascade="all, delete-orphan",
+    #     lazy="dynamic"
+    # )
+
+    # industry_adjustments = relationship(
+    #     "PricingIndustryAdjustment",
+    #     back_populates="profile",
+    #     cascade="all, delete-orphan",
+    #     lazy="dynamic"
+    # )
+
+    # Missing relationships identified by relationship validator
+    premium_age_brackets: Mapped[List["PremiumAgeBracket"]] = relationship(
+        "PremiumAgeBracket",
+        back_populates="pricing_profile",
+        foreign_keys="PremiumAgeBracket.pricing_profile_id",
+        lazy="select"
+    )
+
+    premium_regions: Mapped[List["PremiumRegion"]] = relationship(
+        "PremiumRegion",
+        back_populates="pricing_profile",
+        foreign_keys="PremiumRegion.pricing_profile_id",
+        lazy="select"
+    )
+
+    calculation: Mapped[Optional["PremiumCalculation"]] = relationship(
+        "PremiumCalculation",
+        back_populates="profile",
+        foreign_keys="PremiumCalculation.profile_id",
+        lazy="select",
+        uselist=False
+    )
+
+    insurance_type_rel = relationship("InsuranceType", foreign_keys=[insurance_type_id], lazy="select")
+
+    # Family Tier Pricing - Phase 1.1
+    # TEMPORARILY COMMENTED OUT - Model has definition errors that need fixing
+    # default_tier = relationship(
+    #     "FamilyTierPricing",
+    #     foreign_keys=[default_tier_id],
+    #     lazy="select"
+    # )
+
+    # family_tiers: Mapped[List["FamilyTierPricing"]] = relationship(
+    #     "FamilyTierPricing",
+    #     back_populates="pricing_profile",
+    #     foreign_keys="FamilyTierPricing.pricing_profile_id",
+    #     lazy="select"
+    # )
+
+    # exclusions = relationship(
+    #     "PricingExclusion",
+    #     back_populates="profile",
+    #     cascade="all, delete-orphan",
+    #     lazy="dynamic"
+    # )
     # quotations = relationship(
-    #     "Quotation", 
+    #     "Quotation",
     #     back_populates="pricing_profile",
     #     lazy="dynamic"
     # )
@@ -426,11 +560,11 @@ class QuotationPricingProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDel
     def clone_profile(self, new_name: str, created_by: str) -> "QuotationPricingProfile":
         """
         Create a copy of this profile with new name
-        
+
         Args:
             new_name (str): Name for the cloned profile
             created_by (str): User creating the clone
-            
+
         Returns:
             QuotationPricingProfile: New cloned profile
         """
@@ -467,6 +601,175 @@ class QuotationPricingProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDel
             tags=self.tags.copy() if self.tags else None
         )
         return clone
+
+    # =================================================================
+    # FAMILY TIER PRICING METHODS - PHASE 1.1
+    # =================================================================
+
+    def is_tier_based_pricing_enabled(self) -> bool:
+        """
+        Check if family tier-based pricing is enabled for this profile
+
+        Returns:
+            bool: True if tier-based pricing is enabled and configured
+        """
+        return (
+            self.enable_tier_based_pricing and
+            self.is_currently_active() and
+            (self.supported_tier_types is not None and len(self.supported_tier_types) > 0)
+        )
+
+    def supports_tier_type(self, tier_type: str) -> bool:
+        """
+        Check if a specific tier type is supported by this profile
+
+        Args:
+            tier_type (str): Tier type to check (e.g., 'individual', 'family')
+
+        Returns:
+            bool: True if tier type is supported
+        """
+        if not self.supported_tier_types:
+            return False
+        return tier_type in self.supported_tier_types
+
+    def get_tier_multiplier(self, tier_type: str) -> Decimal:
+        """
+        Get tier multiplier from configuration
+
+        Args:
+            tier_type (str): Tier type
+
+        Returns:
+            Decimal: Tier multiplier (default 1.0 if not configured)
+        """
+        if not self.tier_pricing_config:
+            return Decimal('1.0')
+
+        tier_multipliers = self.tier_pricing_config.get('tier_multipliers', {})
+        return Decimal(str(tier_multipliers.get(tier_type, '1.0')))
+
+    def get_tier_discount(self, tier_type: str) -> Decimal:
+        """
+        Get tier discount from configuration
+
+        Args:
+            tier_type (str): Tier type
+
+        Returns:
+            Decimal: Tier discount percentage (0.0 if not configured)
+        """
+        if not self.tier_pricing_config:
+            return Decimal('0.0')
+
+        tier_discounts = self.tier_pricing_config.get('tier_discounts', {})
+        return Decimal(str(tier_discounts.get(tier_type, '0.0')))
+
+    def calculate_premium_with_tier(
+        self,
+        tier_base_rate: Decimal,
+        tier_multiplier: Decimal,
+        member_count: int,
+        risk_factors: Optional[Dict[str, Any]] = None,
+        benefit_exposure: Optional[Decimal] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate premium with family tier consideration
+
+        Args:
+            tier_base_rate (Decimal): Base rate from tier
+            tier_multiplier (Decimal): Tier multiplier
+            member_count (int): Number of family members
+            risk_factors (Optional[Dict[str, Any]]): Risk factors for calculation
+            benefit_exposure (Optional[Decimal]): Benefit exposure amount
+
+        Returns:
+            Dict[str, Any]: Complete calculation breakdown with tier information
+        """
+        risk_factors = risk_factors or {}
+
+        # Calculate risk score
+        risk_score = self.calculate_risk_score(risk_factors)
+
+        # Start with tier base rate
+        tier_adjusted_rate = tier_base_rate * tier_multiplier
+
+        # Apply benefit value consideration
+        if self.consider_benefit_value and benefit_exposure:
+            benefit_adjustment = benefit_exposure * self.benefit_value_weight / 1000
+            tier_adjusted_rate += benefit_adjustment
+
+        # Apply risk multiplier
+        risk_adjusted_premium = tier_adjusted_rate * risk_score
+
+        # Ensure within profile boundaries
+        final_premium = max(self.minimum_premium, min(risk_adjusted_premium, self.maximum_premium))
+
+        return {
+            'tier_base_rate': float(tier_base_rate),
+            'tier_multiplier': float(tier_multiplier),
+            'tier_adjusted_rate': float(tier_adjusted_rate),
+            'member_count': member_count,
+            'risk_score': float(risk_score),
+            'risk_adjusted_premium': float(risk_adjusted_premium),
+            'final_premium': float(final_premium),
+            'benefit_exposure': float(benefit_exposure) if benefit_exposure else 0,
+            'currency_code': self.currency_code,
+            'calculation_date': func.now(),
+            'profile_id': str(self.id),
+            'profile_name': self.profile_name,
+            'tier_based': True
+        }
+
+    def validate_tier_configuration(self) -> Dict[str, Any]:
+        """
+        Validate tier pricing configuration
+
+        Returns:
+            Dict[str, Any]: Validation results for tier configuration
+        """
+        errors = []
+        warnings = []
+
+        if self.enable_tier_based_pricing:
+            # Check if tier types are configured
+            if not self.supported_tier_types or len(self.supported_tier_types) == 0:
+                errors.append("Tier-based pricing enabled but no supported tier types configured")
+
+            # Check tier pricing config
+            if self.tier_pricing_config:
+                config = self.tier_pricing_config
+
+                # Validate tier multipliers
+                if 'tier_multipliers' in config:
+                    for tier_type, multiplier in config['tier_multipliers'].items():
+                        try:
+                            mult_decimal = Decimal(str(multiplier))
+                            if mult_decimal <= 0:
+                                errors.append(f"Tier multiplier for '{tier_type}' must be positive")
+                        except:
+                            errors.append(f"Invalid tier multiplier for '{tier_type}'")
+
+                # Validate tier discounts
+                if 'tier_discounts' in config:
+                    for tier_type, discount in config['tier_discounts'].items():
+                        try:
+                            disc_decimal = Decimal(str(discount))
+                            if disc_decimal < 0 or disc_decimal > 1:
+                                errors.append(f"Tier discount for '{tier_type}' must be between 0 and 1")
+                        except:
+                            errors.append(f"Invalid tier discount for '{tier_type}'")
+
+            # Warn if default tier is not set
+            if not self.default_tier_id:
+                warnings.append("No default tier configured - tier selection will be required")
+
+        return {
+            'is_valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'tier_based_pricing_enabled': self.enable_tier_based_pricing
+        }
     
     def to_dict(self) -> Dict[str, Any]:
         """
