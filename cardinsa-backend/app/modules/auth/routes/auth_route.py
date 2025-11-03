@@ -171,7 +171,7 @@ async def refresh_token_endpoint(
 
         # Verify user exists and is active
         user_repo = UserRepository(db)
-        user = user_repo.get_by_id(user_id)
+        user = user_repo.get(user_id)
 
         if not user or not user.is_active:
             raise HTTPException(
@@ -213,6 +213,14 @@ async def refresh_token_endpoint(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)
+        )
+    except Exception as e:
+        # Log the error for debugging
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Token refresh failed: {str(e)}"
         )
 
 

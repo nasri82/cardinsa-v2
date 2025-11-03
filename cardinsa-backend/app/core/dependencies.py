@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.settings import settings
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import decode_token, is_token_blacklisted
 
 from app.modules.auth.models.user_model import User
 from app.modules.auth.models.role_model import Role
@@ -86,6 +86,15 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid subject"
+        )
+
+    # SECURITY: Check if access token is blacklisted (logout/revocation)
+    jti = (payload or {}).get("jti")
+    if jti and is_token_blacklisted(jti, db):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Prefer by UUID; fallback to username/email
