@@ -25,8 +25,15 @@ def _get(name: str, default):
     # tolerate missing settings while keeping good defaults
     return getattr(settings, name, default)
 
+# DATABASE_URL is required - fail early if not configured
+if not hasattr(settings, "DATABASE_URL") or not settings.DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL is not configured. Please set DATABASE_URL in your .env file. "
+        "See .env.example for the correct format."
+    )
+
 engine = create_engine(
-    _get("DATABASE_URL", "postgresql+psycopg2://postgres:Rasha%401973@localhost:5432/cardinsa"),
+    settings.DATABASE_URL,
     echo=_get("DB_ECHO", False),
     pool_pre_ping=_get("DB_POOL_PRE_PING", True),
     pool_size=_get("DB_POOL_SIZE", 10),

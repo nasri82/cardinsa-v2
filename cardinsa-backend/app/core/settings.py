@@ -19,7 +19,9 @@ class Settings(BaseSettings):
 
     # --- Security / JWT (compatible with your .env) ---
     JWT_SECRET: str = Field("change-me-in-.env", validation_alias=AliasChoices("JWT_SECRET", "SECRET_KEY"))
-    JWT_EXPIRE_MINUTES: int = Field(60, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES", "ACCESS_TOKEN_EXPIRE_MINUTES"))
+    REFRESH_TOKEN_SECRET: str = Field("change-me-in-.env-refresh", validation_alias=AliasChoices("REFRESH_TOKEN_SECRET"))
+    JWT_EXPIRE_MINUTES: int = Field(30, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES", "ACCESS_TOKEN_EXPIRE_MINUTES"))  # Changed from 60 to 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(7, validation_alias=AliasChoices("REFRESH_TOKEN_EXPIRE_DAYS"))  # NEW: 7 days
     JWT_ALGORITHM: str = Field("HS256", validation_alias=AliasChoices("JWT_ALGORITHM", "JWT_ALG"))
 
     # (keep your existing EdDSA fields if you still need them later)
@@ -29,7 +31,8 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg://postgres:Rasha%401973@localhost:5432/cardinsa"
+    # DATABASE_URL must be set in .env file - no default for security
+    DATABASE_URL: str
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
@@ -40,6 +43,13 @@ class Settings(BaseSettings):
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: List[str] = ["*"]
     CORS_ALLOW_HEADERS: List[str] = ["*"]
+
+    # --- Rate Limiting ---
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS: int = 100  # requests per window
+    RATE_LIMIT_WINDOW: int = 60  # window in seconds
+    RATE_LIMIT_STORAGE: str = "memory"  # "memory" or "redis"
+    RATE_LIMIT_REDIS_URL: Optional[str] = None  # "redis://localhost:6379/0"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
