@@ -81,10 +81,29 @@ class ProgramRepository(BaseRepository):  # ✅ Fixed: Correct import and no gen
             Program.is_deleted == False
         ).scalar() or 0
 
+        # Calculate average enrollment progress using SQL expression
+        # Formula: (current_enrollment / NULLIF(enrollment_target, 0)) * 100
+        # We use CASE to handle division by zero and NULL values
+        from sqlalchemy import case, cast, Float
+
+        progress_expr = case(
+            (Program.enrollment_target.is_(None), 0.0),
+            (Program.enrollment_target == 0, 0.0),
+            else_=func.least(
+                (cast(Program.current_enrollment, Float) / Program.enrollment_target) * 100,
+                100.0
+            )
+        )
+
+        avg_progress = self.db.query(func.avg(progress_expr)).filter(
+            Program.is_deleted == False
+        ).scalar() or 0.0
+
         return {
             'total_programs': total,
             'active_programs': active,
             'by_type': by_type,
             'by_status': by_status,
-            'total_enrollment': int(total_enrollment)
+            'total_enrollment': int(total_enrollment),
+            'average_enrollment_progress': float(avg_progress)
         }
