@@ -57,17 +57,21 @@ class CurrentUser:
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
+    x_device_fingerprint: Optional[str] = Header(None, alias="X-Device-Fingerprint"),
 ) -> CurrentUser:
     """
     Dependency to get current authenticated user from JWT token.
-    
+
+    SECURITY: Validates device fingerprint to detect token theft
+
     Args:
         token: JWT access token from Authorization header
         db: Database session
-        
+        x_device_fingerprint: Device fingerprint from request header
+
     Returns:
         CurrentUser wrapper with authenticated user
-        
+
     Raises:
         HTTPException: If token is invalid or user not found
     """
@@ -96,6 +100,16 @@ async def get_current_user(
             detail="Token has been revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # SECURITY: Validate device fingerprint (token binding)
+    token_fingerprint = (payload or {}).get("device_fp")
+    if token_fingerprint and x_device_fingerprint:
+        if token_fingerprint != x_device_fingerprint:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Device fingerprint mismatch - possible token theft. Please login again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     # Prefer by UUID; fallback to username/email
     user: Optional[User] = None

@@ -10,7 +10,7 @@ localStorage-based authentication with mobile/offline support.
 from datetime import datetime, timedelta
 from typing import Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import jwt
@@ -36,6 +36,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
+    x_device_fingerprint: Optional[str] = Header(None, alias="X-Device-Fingerprint"),
 ):
     """
     OAuth2 compatible token login with refresh token rotation.
@@ -43,6 +44,7 @@ async def login(
     SECURITY FEATURES:
     - Returns both access token (30 min) and refresh token (7 days)
     - Tokens include JTI for blacklist tracking
+    - Device fingerprint binding for token theft detection
     - Account lockout after failed attempts
     - Failed login tracking
 
@@ -105,9 +107,19 @@ async def login(
     user.account_locked_until = None
     db.commit()
 
-    # SECURITY: Create tokens with JTI for blacklist tracking
-    access_token, access_jti = create_access_token(subject=str(user.id))
-    refresh_token, refresh_jti = create_refresh_token(subject=str(user.id))
+    # SECURITY: Create tokens with JTI for blacklist tracking and device fingerprint binding
+    extra_data = {}
+    if x_device_fingerprint:
+        extra_data["device_fp"] = x_device_fingerprint
+
+    access_token, access_jti = create_access_token(
+        subject=str(user.id),
+        extra_data=extra_data if extra_data else None
+    )
+    refresh_token, refresh_jti = create_refresh_token(
+        subject=str(user.id),
+        extra_data=extra_data if extra_data else None
+    )
 
     return {
         "access_token": access_token,
@@ -153,6 +165,7 @@ async def refresh_token_endpoint(
         # Extract token data
         user_id_str = payload.get("sub")
         old_jti = payload.get("jti")
+        device_fp = payload.get("device_fp")  # Preserve device fingerprint
 
         if not user_id_str or not old_jti:
             raise HTTPException(
@@ -189,9 +202,19 @@ async def refresh_token_endpoint(
             db=db
         )
 
-        # Create new token pair
-        new_access_token, access_jti = create_access_token(subject=str(user.id))
-        new_refresh_token, refresh_jti = create_refresh_token(subject=str(user.id))
+        # Create new token pair (preserve device fingerprint from old token)
+        extra_data = {}
+        if device_fp:
+            extra_data["device_fp"] = device_fp
+
+        new_access_token, access_jti = create_access_token(
+            subject=str(user.id),
+            extra_data=extra_data if extra_data else None
+        )
+        new_refresh_token, refresh_jti = create_refresh_token(
+            subject=str(user.id),
+            extra_data=extra_data if extra_data else None
+        )
 
         return {
             "access_token": new_access_token,
