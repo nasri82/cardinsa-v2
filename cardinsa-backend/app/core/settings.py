@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
     # --- Database ---
-    DATABASE_URL: str = "postgresql+psycopg://postgres:Rasha%401973@localhost:5432/cardinsa"
+    # DATABASE_URL must be set in .env file - no default for security
+    DATABASE_URL: str
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
